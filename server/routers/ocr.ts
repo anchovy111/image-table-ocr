@@ -122,8 +122,10 @@ export const ocrRouter = router({
               ],
         };
 
-        const response = await invokeLLM({
-          messages: [userMessage],
+        let response;
+        try {
+          response = await invokeLLM({
+            messages: [userMessage],
           response_format: {
             type: "json_schema",
             json_schema: {
@@ -151,17 +153,63 @@ export const ocrRouter = router({
               },
             },
           },
-        });
+          });
+        } catch (llmErr) {
+          console.error("[OCR] LLM invocation failed:", llmErr);
+          throw llmErr;
+        }
 
-                const rawContent = response.choices[0]?.message?.content;
-        if (!rawContent) {
+        // Defensive checks for LLM response
+        if (!response) {
+          console.error("[OCR] LLM response is null/undefined");
+          throw new Error("AI 返回为空");
+        }
+
+        if (!response.choices || !Array.isArray(response.choices)) {
+          console.error("[OCR] LLM response.choices invalid:", response);
+          throw new Error("AI 返回格式错误：choices 不是数组");
+        }
+
+        if (response.choices.length === 0) {
+          console.error("[OCR] LLM response.choices is empty");
+          throw new Error("AI 返回格式错误：choices 数组为空");
+        }
+
+        const choice = response.choices[0];
+        if (!choice || !choice.message) {
+          console.error("[OCR] LLM choice or message missing:", choice);
+          throw new Error("AI 返回格式错误：message 不存在");
+        }
+
+        const rawContent = choice.message.content;
+        if (rawContent === undefined || rawContent === null) {
+          console.error("[OCR] LLM content is null/undefined:", choice.message);
           throw new Error("AI 返回内容为空");
         }
+
         // content can be string or array of content parts
-        const content = typeof rawContent === "string"
-          ? rawContent
-          : rawContent.map((p) => (p.type === "text" ? p.text : "")).join("");
-        const parsed = TableDataSchema.parse(JSON.parse(content));
+        let content: string;
+        if (typeof rawContent === "string") {
+          content = rawContent;
+        } else if (Array.isArray(rawContent)) {
+          content = rawContent.map((p: any) => (p && p.type === "text" ? p.text : "")).join("");
+        } else {
+          console.error("[OCR] Unexpected content type:", typeof rawContent, rawContent);
+          throw new Error("AI 返回内容格式不支持");
+        }
+
+        if (!content || content.trim().length === 0) {
+          console.error("[OCR] Content is empty after processing");
+          throw new Error("AI 返回内容处理后为空");
+        }
+
+        let parsed;
+        try {
+          parsed = TableDataSchema.parse(JSON.parse(content));
+        } catch (parseErr) {
+          console.error("[OCR] JSON parse error:", parseErr, "content:", content);
+          throw parseErr;
+        }
 
         await updateOcrRecord(input.recordId, ctx.user.id, {
           tableData: JSON.stringify(parsed),
