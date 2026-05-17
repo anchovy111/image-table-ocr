@@ -1,0 +1,43 @@
+{
+  "build_command": "pnpm run build",
+  "capabilities": [
+    "server",
+    "db",
+    "user"
+  ],
+  "dev_command": "pnpm run dev",
+  "env_vars": {
+    "DATABASE_URL": "mysql://6Sr3soZmfbj88ac.root:YpFeX6ksh94wQ7tN17Jk@gateway06.us-east-1.prod.aws.tidbcloud.com:4000/gBct6J6hZo2nN5xvZhomXg?ssl={\"rejectUnauthorized\":true}"
+  },
+  "experiments": [
+    "no_db_push"
+  ],
+  "git_remote": {
+    "repo_url": "s3://vida-prod-gitrepo/webdev-git/310519663668574141/gBct6J6hZo2nN5xvZhomXg",
+    "access_key_id": "ASIAZV3A2ECZDKO5B6RK",
+    "secret_access_key": "ihdNkjjW2Bwt4RPeoEIM3K/s46EDbgmvgct+9HTa",
+    "session_token": "IQoJb3JpZ2luX2VjENz//////////wEaCXVzLWVhc3QtMSJIMEYCIQCOR0VlHf+PSPBlU5mgbYpiU1Brci43XfUoS34Iyc+TmQIhAIGySr+5OHVyRlOhfrUmnj1MGP09r6yp94BfCzAuPSMMKv8DCKX//////////wEQBBoMNjY1Mzg2MDk4ODY2IgymDyeCe9PQMxxMMx4q0wOadf3CGhtWZoRqjT3S1bHD4r9JkgFGqtQQz+wTRqR1dTlyiCkWKKnBZCZ2JShk2ml5r2oOOcv1zlIjW9PLv+3k5eH28mGqIAnTR4604zihK6X/sq28YUUkzfgFBpIYhoCH50NwIYqWL6g1EOJIquzHVYFy1kI+QrvfoRwpmtZ3uTlUYeviV2MoA+PqqtP0yjKeQqQnxPecEUOxC5Vom01xm0kjg6QTNmgmMJJkJYw1wUiaRaSiR4AJcAdDfyahuUG9Nd7Dzay6sKc67AtQDnOWUacqEHaRBZM9zfiw55rVvmQ2S8W2JcUHOcMVPoaSaOx6RaOCRBlJENLpWmjZ9EBJASbNiIZTAwT3C4ItkMO/d5q2IOPgYYsDUwdY1j0T9x08TKBh+szqdG5BvZ0Evm4WTxT9d8xeElXVVtRXe49UtMbtwoL89KH0VfeTBIWzCn8Ad7fgUUTFyhZABXy5FLDzCdb+1kSORfOKp9J8WewfaCOw3Oj8NubUYE+XjXUUX4JjkXEzFfh7/Apdh5jbq9ieSlhiNwjeadFd8+NxQir9rnNvii0lLDUR8Mq7bdtSCtMd6Fe6xbzDmIt1FOmmG9saleiPyln8WMA2aaqwkFqG9t8JqzCDyqbQBjqcAb8WAHMxcSf8PMaBt8/oD3M2xHmCNNGNJMEwS/bwz77wSMkigBoIcAETmQiedMkRrJUZ+oWWd+MdAj6uRXO/KS+Dh9Gi+FIKlAoX7tuF7fJUzkGMjW1Qd7KK1FbC+oqNF9cqfLrU9605zzTPwYtCwVvWXuG2TRUkihzebibk+CufvjL2t0nFNVXiJB/2soMYnyivrNUSNa0Poqv1pw==",
+    "expiration": "2026-05-17T23:22:43.000Z"
+  },
+  "name": "image-table-ocr",
+  "path": "/home/ubuntu/image-table-ocr",
+  "port": 3000,
+  "secrets": {
+    "BUILT_IN_FORGE_API_KEY": "Htazuo4FEatPMbYdEyfEQe",
+    "BUILT_IN_FORGE_API_URL": "https://forge.manus.ai",
+    "JWT_SECRET": "CsrqTybWqXEjhms7Z53VzW",
+    "OAUTH_SERVER_URL": "https://api.manus.im",
+    "OWNER_NAME": "欢 程",
+    "OWNER_OPEN_ID": "Tnh95iAwqjt57YnWmWSYWg",
+    "VITE_ANALYTICS_ENDPOINT": "https://manus-analytics.com",
+    "VITE_ANALYTICS_WEBSITE_ID": "8411b7be-15ad-4a8f-a30c-796879595bec",
+    "VITE_APP_ID": "gBct6J6hZo2nN5xvZhomXg",
+    "VITE_APP_LOGO": "",
+    "VITE_APP_TITLE": "图片表格识别工具",
+    "VITE_FRONTEND_FORGE_API_KEY": "fbb3ixFgcLitvwqkgvzyG3",
+    "VITE_FRONTEND_FORGE_API_URL": "https://forge.manus.ai",
+    "VITE_OAUTH_PORTAL_URL": "https://manus.im"
+  },
+  "template_id": "web-db-user",
+  "test_command": "pnpm test"
+}
