@@ -15,6 +15,13 @@
       "when": 1779017090215,
       "tag": "0001_fearless_captain_marvel",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1779021268420,
+      "tag": "0002_crazy_norrin_radd",
+      "breakpoints": true
     }
   ]
 }

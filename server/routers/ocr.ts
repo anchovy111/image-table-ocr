@@ -11,6 +11,14 @@ import {
   deleteOcrRecord,
 } from "../ocrDb";
 
+function getMimeType(filename?: string | null): string {
+  if (!filename) return "image/jpeg";
+  const lower = filename.toLowerCase();
+  if (lower.endsWith(".png")) return "image/png";
+  if (lower.endsWith(".gif")) return "image/gif";
+  return "image/jpeg";
+}
+
 const TableDataSchema = z.object({
   headers: z.array(z.string()),
   rows: z.array(z.array(z.string())),
@@ -42,6 +50,7 @@ export const ocrRouter = router({
         imageUrl: url,
         imageKey: key,
         originalFilename: input.filename,
+        base64Data: input.base64Data,
         tableData: JSON.stringify({ headers: [], rows: [] }),
         status: "pending",
       } as any);
@@ -112,7 +121,7 @@ export const ocrRouter = router({
                 {
                   type: "image_url" as const,
                   image_url: {
-                    url: record.imageUrl,
+                    url: `data:${getMimeType(record.originalFilename)};base64,${record.base64Data}`,
                     detail: "high" as const,
                   },
                 },

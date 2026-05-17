@@ -1,0 +1,1 @@
+ALTER TABLE `ocr_records` ADD `base64Data` text;

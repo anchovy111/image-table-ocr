@@ -34,6 +34,7 @@ export const ocrRecords = mysqlTable("ocr_records", {
   imageUrl: text("imageUrl").notNull(),
   imageKey: varchar("imageKey", { length: 512 }).notNull(),
   originalFilename: varchar("originalFilename", { length: 255 }),
+  base64Data: text("base64Data"),
   tableData: text("tableData").notNull(), // JSON string: { headers: string[], rows: string[][] }
   status: mysqlEnum("status", ["pending", "processing", "done", "error"]).default("pending").notNull(),
   errorMessage: text("errorMessage"),
