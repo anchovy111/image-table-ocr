@@ -16,47 +16,48 @@ const TableDataSchema = z.object({
   rows: z.array(z.array(z.string())),
 });
 
+type TableData = z.infer<typeof TableDataSchema>;
+
 export const ocrRouter = router({
-  // Upload image and create a pending record
   uploadImage: protectedProcedure
     .input(
       z.object({
         filename: z.string(),
         mimeType: z.string(),
-        base64Data: z.string(), // base64 encoded file content
+        base64Data: z.string(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { filename, mimeType, base64Data } = input;
+      const buffer = Buffer.from(input.base64Data, "base64");
 
-      // Decode base64 to buffer
-      const buffer = Buffer.from(base64Data, "base64");
-      const fileKey = `ocr/${ctx.user.id}/${Date.now()}-${filename}`;
+      const { url, key } = await storagePut(
+        `ocr/${ctx.user.id}/${Date.now()}-${input.filename}`,
+        buffer,
+        input.mimeType
+      );
 
-      const { url } = await storagePut(fileKey, buffer, mimeType);
-
-      // Create pending record
-      const title = filename.replace(/\.[^/.]+$/, "") || "未命名识别";
       const recordId = await createOcrRecord({
         userId: ctx.user.id,
-        title,
+        title: input.filename.replace(/\.[^.]+$/, ""),
         imageUrl: url,
-        imageKey: fileKey,
-        originalFilename: filename,
+        imageKey: key,
+        originalFilename: input.filename,
         tableData: JSON.stringify({ headers: [], rows: [] }),
         status: "pending",
-      });
+      } as any);
 
       return { recordId, imageUrl: url };
     }),
 
-  // Trigger AI recognition for a record
   recognize: protectedProcedure
     .input(z.object({ recordId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const record = await getOcrRecordById(input.recordId, ctx.user.id);
       if (!record) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "识别记录不存在" });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "识别记录不存在",
+        });
       }
 
       // Mark as processing
@@ -126,38 +127,43 @@ export const ocrRouter = router({
         try {
           response = await invokeLLM({
             messages: [userMessage],
-          response_format: {
-            type: "json_schema",
-            json_schema: {
-              name: "table_extraction",
-              strict: true,
-              schema: {
-                type: "object",
-                properties: {
-                  headers: {
-                    type: "array",
-                    items: { type: "string" },
-                    description: "表格列标题数组",
-                  },
-                  rows: {
-                    type: "array",
-                    items: {
+            response_format: {
+              type: "json_schema",
+              json_schema: {
+                name: "table_extraction",
+                strict: true,
+                schema: {
+                  type: "object",
+                  properties: {
+                    headers: {
                       type: "array",
                       items: { type: "string" },
+                      description: "表格列标题数组",
                     },
-                    description: "表格数据行，每行是一个字符串数组",
+                    rows: {
+                      type: "array",
+                      items: {
+                        type: "array",
+                        items: { type: "string" },
+                      },
+                      description: "表格数据行，每行是一个字符串数组",
+                    },
                   },
+                  required: ["headers", "rows"],
+                  additionalProperties: false,
                 },
-                required: ["headers", "rows"],
-                additionalProperties: false,
               },
             },
-          },
           });
         } catch (llmErr) {
           console.error("[OCR] LLM invocation failed:", llmErr);
           throw llmErr;
         }
+
+        // Log full response for debugging
+        console.log("[OCR] LLM response type:", typeof response);
+        console.log("[OCR] LLM response keys:", response ? Object.keys(response) : "null");
+        console.log("[OCR] Full LLM response:", JSON.stringify(response).substring(0, 1000));
 
         // Defensive checks for LLM response
         if (!response) {
@@ -165,8 +171,13 @@ export const ocrRouter = router({
           throw new Error("AI 返回为空");
         }
 
-        if (!response.choices || !Array.isArray(response.choices)) {
-          console.error("[OCR] LLM response.choices invalid:", response);
+        if (!response.choices) {
+          console.error("[OCR] LLM response.choices is missing:", response);
+          throw new Error("AI 返回格式错误：choices 字段不存在");
+        }
+
+        if (!Array.isArray(response.choices)) {
+          console.error("[OCR] LLM response.choices is not an array, type:", typeof response.choices, "value:", response.choices);
           throw new Error("AI 返回格式错误：choices 不是数组");
         }
 
@@ -230,55 +241,68 @@ export const ocrRouter = router({
       }
     }),
 
-  // Get a single record
+  listRecords: protectedProcedure.query(async ({ ctx }) => {
+    const records = await listOcrRecords(ctx.user.id);
+    return records.map((r) => ({
+      ...r,
+      tableData: JSON.parse(r.tableData),
+    }));
+  }),
+
   getRecord: protectedProcedure
     .input(z.object({ recordId: z.number() }))
     .query(async ({ ctx, input }) => {
       const record = await getOcrRecordById(input.recordId, ctx.user.id);
       if (!record) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "识别记录不存在" });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "识别记录不存在",
+        });
       }
       return {
         ...record,
-        tableData: JSON.parse(record.tableData) as { headers: string[]; rows: string[][] },
+        tableData: JSON.parse(record.tableData),
       };
     }),
 
-  // List all records for the current user
-  listRecords: protectedProcedure.query(async ({ ctx }) => {
-    const records = await listOcrRecords(ctx.user.id);
-    return records.map((r) => ({
-      ...r,
-      tableData: JSON.parse(r.tableData) as { headers: string[]; rows: string[][] },
-    }));
-  }),
+  deleteRecord: protectedProcedure
+    .input(z.object({ recordId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const record = await getOcrRecordById(input.recordId, ctx.user.id);
+      if (!record) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "识别记录不存在",
+        });
+      }
+      await deleteOcrRecord(input.recordId, ctx.user.id);
+      return { success: true };
+    }),
 
-  // Update table data (inline editing)
   updateTableData: protectedProcedure
     .input(
       z.object({
         recordId: z.number(),
-        tableData: TableDataSchema,
-        title: z.string().optional(),
+        tableData: z.object({
+          headers: z.array(z.string()),
+          rows: z.array(z.array(z.string())),
+        }),
       })
     )
     .mutation(async ({ ctx, input }) => {
       const record = await getOcrRecordById(input.recordId, ctx.user.id);
       if (!record) {
-        throw new TRPCError({ code: "NOT_FOUND", message: "识别记录不存在" });
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "识别记录不存在",
+        });
       }
-      await updateOcrRecord(input.recordId, ctx.user.id, {
-        tableData: JSON.stringify(input.tableData),
-        ...(input.title ? { title: input.title } : {}),
-      });
-      return { success: true };
-    }),
 
-  // Delete a record
-  deleteRecord: protectedProcedure
-    .input(z.object({ recordId: z.number() }))
-    .mutation(async ({ ctx, input }) => {
-      await deleteOcrRecord(input.recordId, ctx.user.id);
+      const validated = TableDataSchema.parse(input.tableData);
+      await updateOcrRecord(input.recordId, ctx.user.id, {
+        tableData: JSON.stringify(validated),
+      });
+
       return { success: true };
     }),
 });

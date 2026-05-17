@@ -151,6 +151,21 @@ describe("ocr.getRecord", () => {
 
 describe("ocr.deleteRecord", () => {
   it("should delete a record successfully", async () => {
+    const mockRecord = {
+      id: 1,
+      userId: 1,
+      title: "测试",
+      imageUrl: "/manus-storage/test.jpg",
+      imageKey: "ocr/1/test.jpg",
+      originalFilename: "test.jpg",
+      tableData: JSON.stringify({ headers: ["X"], rows: [["val"]] }),
+      status: "done" as const,
+      errorMessage: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    vi.mocked(getOcrRecordById).mockResolvedValueOnce(mockRecord);
+
     const ctx = createMockContext();
     const caller = appRouter.createCaller(ctx);
 
