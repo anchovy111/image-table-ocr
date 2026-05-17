@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { Upload, ImageIcon, FileText, X, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf"];
+const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/gif", "application/pdf"];
 const MAX_SIZE_MB = 10;
 const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
 
@@ -21,7 +21,7 @@ export function ImageUploader({ onFileSelect, disabled }: ImageUploaderProps) {
 
   const validateFile = (file: File): string | null => {
     if (!ACCEPTED_TYPES.includes(file.type)) {
-      return "仅支持 JPG、PNG、WebP、GIF 和 PDF 格式";
+      return "仅支持 JPG、PNG、GIF 和 PDF 格式";
     }
     if (file.size > MAX_SIZE_BYTES) {
       return `文件大小不能超过 ${MAX_SIZE_MB}MB`;

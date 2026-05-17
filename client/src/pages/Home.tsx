@@ -245,7 +245,7 @@ export default function Home() {
                 上传图片
               </CardTitle>
               <CardDescription className="text-xs">
-                支持 JPG、PNG、WebP、PDF 格式
+                支持 JPG、PNG、GIF、PDF 格式
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">

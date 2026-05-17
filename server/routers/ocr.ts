@@ -171,6 +171,12 @@ export const ocrRouter = router({
           throw new Error("AI 返回为空");
         }
 
+        if ((response as any).error) {
+          const errorMsg = ((response as any).error as any).message || JSON.stringify((response as any).error);
+          console.error("[OCR] LLM API error:", errorMsg);
+          throw new Error(`LLM API 错误: ${errorMsg}`);
+        }
+
         if (!response.choices) {
           console.error("[OCR] LLM response.choices is missing:", response);
           throw new Error("AI 返回格式错误：choices 字段不存在");
