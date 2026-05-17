@@ -26,3 +26,20 @@ export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
 // TODO: Add your tables here
+
+export const ocrRecords = mysqlTable("ocr_records", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  title: varchar("title", { length: 255 }).notNull().default("未命名识别"),
+  imageUrl: text("imageUrl").notNull(),
+  imageKey: varchar("imageKey", { length: 512 }).notNull(),
+  originalFilename: varchar("originalFilename", { length: 255 }),
+  tableData: text("tableData").notNull(), // JSON string: { headers: string[], rows: string[][] }
+  status: mysqlEnum("status", ["pending", "processing", "done", "error"]).default("pending").notNull(),
+  errorMessage: text("errorMessage"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type OcrRecord = typeof ocrRecords.$inferSelect;
+export type InsertOcrRecord = typeof ocrRecords.$inferInsert;

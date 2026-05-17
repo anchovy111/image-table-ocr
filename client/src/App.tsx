@@ -4,35 +4,36 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import { Navbar } from "./components/Navbar";
 import Home from "./pages/Home";
+import HistoryPage from "./pages/History";
 
 function Router() {
-  // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
       <Route path={"/"} component={Home} />
+      <Route path={"/history"} component={HistoryPage} />
       <Route path={"/404"} component={NotFound} />
-      {/* Final fallback route */}
       <Route component={NotFound} />
     </Switch>
   );
 }
 
-// NOTE: About Theme
-// - First choose a default theme according to your design style (dark or light bg), than change color palette in index.css
-//   to keep consistent foreground/background color across components
-// - If you want to make theme switchable, pass `switchable` ThemeProvider and use `useTheme` hook
-
 function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider
-        defaultTheme="light"
-        // switchable
-      >
+      <ThemeProvider defaultTheme="light">
         <TooltipProvider>
-          <Toaster />
-          <Router />
+          <Toaster position="top-right" richColors />
+          <div className="min-h-screen bg-background flex flex-col">
+            <Navbar />
+            <main className="flex-1">
+              <Router />
+            </main>
+            <footer className="border-t border-border/40 py-6 text-center text-xs text-muted-foreground/60">
+              <p>图片表格识别工具 · 由 AI 驱动</p>
+            </footer>
+          </div>
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>
