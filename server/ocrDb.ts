@@ -36,11 +36,26 @@ export async function getOcrRecordById(id: number, userId: number): Promise<OcrR
 export async function listOcrRecords(userId: number): Promise<OcrRecord[]> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return db
-    .select()
+  const result = await db
+    .select({
+      id: ocrRecords.id,
+      userId: ocrRecords.userId,
+      title: ocrRecords.title,
+      imageUrl: ocrRecords.imageUrl,
+      imageKey: ocrRecords.imageKey,
+      originalFilename: ocrRecords.originalFilename,
+      tableData: ocrRecords.tableData,
+      status: ocrRecords.status,
+      errorMessage: ocrRecords.errorMessage,
+      createdAt: ocrRecords.createdAt,
+      updatedAt: ocrRecords.updatedAt,
+      base64Data: { sql: "null" } as any,
+    })
     .from(ocrRecords)
     .where(eq(ocrRecords.userId, userId))
     .orderBy(desc(ocrRecords.createdAt));
+  
+  return result as OcrRecord[];
 }
 
 export async function deleteOcrRecord(id: number, userId: number): Promise<void> {
