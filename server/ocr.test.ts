@@ -9,6 +9,7 @@ vi.mock("./ocrDb", () => ({
   getOcrRecordById: vi.fn(),
   listOcrRecords: vi.fn().mockResolvedValue([]),
   deleteOcrRecord: vi.fn().mockResolvedValue(undefined),
+  listOcrRecordsPaginated: vi.fn(),
 }));
 
 // Mock storage
@@ -38,7 +39,7 @@ vi.mock("./_core/llm", () => ({
   }),
 }));
 
-import { createOcrRecord, getOcrRecordById, listOcrRecords, deleteOcrRecord } from "./ocrDb";
+import { createOcrRecord, getOcrRecordById, listOcrRecords, deleteOcrRecord, listOcrRecordsPaginated } from "./ocrDb";
 
 function createMockContext(userId = 1): TrpcContext {
   return {
@@ -146,6 +147,69 @@ describe("ocr.getRecord", () => {
     const result = await caller.ocr.getRecord({ recordId: 1 });
 
     expect(result.tableData).toEqual({ headers: ["X"], rows: [["val"]] });
+  });
+});
+
+describe("ocr.listRecordsPaginated", () => {
+  it("should return paginated records with hasMore flag", async () => {
+    const mockRecords = Array.from({ length: 20 }, (_, i) => ({
+      id: i + 1,
+      userId: 1,
+      title: `记录 ${i + 1}`,
+      imageUrl: "/manus-storage/test.jpg",
+      imageKey: "ocr/1/test.jpg",
+      originalFilename: "test.jpg",
+      tableData: JSON.stringify({ headers: ["A"], rows: [["1"]] }),
+      status: "done" as const,
+      errorMessage: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }));
+
+    vi.mocked(listOcrRecordsPaginated).mockResolvedValueOnce({
+      records: mockRecords,
+      total: 50,
+      hasMore: true,
+    });
+
+    const ctx = createMockContext();
+    const caller = appRouter.createCaller(ctx);
+    const result = await caller.ocr.listRecordsPaginated({ page: 1, pageSize: 20 });
+
+    expect(result.records).toHaveLength(20);
+    expect(result.total).toBe(50);
+    expect(result.hasMore).toBe(true);
+    expect(result.page).toBe(1);
+    expect(result.pageSize).toBe(20);
+  });
+
+  it("should return hasMore=false on last page", async () => {
+    const mockRecords = Array.from({ length: 10 }, (_, i) => ({
+      id: i + 41,
+      userId: 1,
+      title: `记录 ${i + 41}`,
+      imageUrl: "/manus-storage/test.jpg",
+      imageKey: "ocr/1/test.jpg",
+      originalFilename: "test.jpg",
+      tableData: JSON.stringify({ headers: ["A"], rows: [["1"]] }),
+      status: "done" as const,
+      errorMessage: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }));
+
+    vi.mocked(listOcrRecordsPaginated).mockResolvedValueOnce({
+      records: mockRecords,
+      total: 50,
+      hasMore: false,
+    });
+
+    const ctx = createMockContext();
+    const caller = appRouter.createCaller(ctx);
+    const result = await caller.ocr.listRecordsPaginated({ page: 3, pageSize: 20 });
+
+    expect(result.records).toHaveLength(10);
+    expect(result.hasMore).toBe(false);
   });
 });
 

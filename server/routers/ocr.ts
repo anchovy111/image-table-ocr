@@ -9,6 +9,7 @@ import {
   getOcrRecordById,
   listOcrRecords,
   deleteOcrRecord,
+  listOcrRecordsPaginated,
 } from "../ocrDb";
 
 function getMimeType(filename?: string | null): string {
@@ -263,6 +264,31 @@ export const ocrRouter = router({
       tableData: JSON.parse(r.tableData),
     }));
   }),
+
+  listRecordsPaginated: protectedProcedure
+    .input(
+      z.object({
+        page: z.number().int().min(1).default(1),
+        pageSize: z.number().int().min(1).max(100).default(20),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const result = await listOcrRecordsPaginated(
+        ctx.user.id,
+        input.page,
+        input.pageSize
+      );
+      return {
+        records: result.records.map((r) => ({
+          ...r,
+          tableData: JSON.parse(r.tableData),
+        })),
+        total: result.total,
+        hasMore: result.hasMore,
+        page: input.page,
+        pageSize: input.pageSize,
+      };
+    }),
 
   getRecord: protectedProcedure
     .input(z.object({ recordId: z.number() }))
