@@ -272,17 +272,28 @@ export const ocrRouter = router({
         pageSize: z.number().int().min(1).max(100).default(20),
       })
     )
-    .query(async ({ ctx, input }) => {
+        .query(async ({ ctx, input }) => {
       const result = await listOcrRecordsPaginated(
         ctx.user.id,
         input.page,
         input.pageSize
       );
       return {
-        records: result.records.map((r) => ({
-          ...r,
-          tableData: JSON.parse(r.tableData),
-        })),
+        records: result.records.map((r) => {
+          let parsedTableData = [];
+          try {
+            if (typeof r.tableData === 'string' && r.tableData.trim()) {
+              parsedTableData = JSON.parse(r.tableData);
+            }
+          } catch (e) {
+            console.error('Failed to parse tableData:', e);
+            parsedTableData = [];
+          }
+          return {
+            ...r,
+            tableData: parsedTableData,
+          };
+        }),
         total: result.total,
         hasMore: result.hasMore,
         page: input.page,
