@@ -99,9 +99,9 @@ export default function HistoryPage() {
         });
       }
     }
-  }, [data?.records, currentPage]);
+  }, [data, currentPage]);
 
-  const utils = trpc.useUtils();
+  const utils = React.useMemo(() => trpc.useUtils(), []);
 
   const deleteMutation = trpc.ocr.deleteRecord.useMutation({
     onSuccess: () => {
@@ -110,7 +110,7 @@ export default function HistoryPage() {
       setAllRecords([]);
       deleteId && setDeleteId(null);
       // 使分页查询缓存失效，重新加载第一页
-      utils.ocr.listRecordsPaginated.invalidate();
+      utils?.ocr.listRecordsPaginated.invalidate();
     },
     onError: () => toast.error("删除失败，请重试"),
   });
