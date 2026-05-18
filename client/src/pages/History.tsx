@@ -101,7 +101,7 @@ export default function HistoryPage() {
 
   // 处理数据更新（useEffect 必须在所有 Hooks 之后）
   React.useEffect(() => {
-    if (data?.records) {
+    if (data?.records && data.records.length > 0) {
       if (currentPage === 1) {
         setAllRecords(data.records);
       } else {
@@ -113,7 +113,7 @@ export default function HistoryPage() {
         });
       }
     }
-  }, [data, currentPage]);
+  }, [currentPage, data?.records?.length, JSON.stringify(data?.records?.map((r) => r.id))]);
 
   const handleLoadMore = () => {
     setCurrentPage((prev) => prev + 1);
