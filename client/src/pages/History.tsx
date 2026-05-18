@@ -72,11 +72,13 @@ const statusConfig = {
 const PAGE_SIZE = 20;
 
 export default function HistoryPage() {
+  // 所有 Hooks 必须在组件顶层调用
   const { isAuthenticated, loading } = useAuth();
   const [viewRecord, setViewRecord] = useState<OcrRecord | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [allRecords, setAllRecords] = useState<OcrRecord[]>([]);
+  const utils = trpc.useUtils();
 
   const { data, isLoading, isFetching } = trpc.ocr.listRecordsPaginated.useQuery(
     { page: currentPage, pageSize: PAGE_SIZE },
@@ -85,7 +87,19 @@ export default function HistoryPage() {
     }
   );
 
-  // 处理数据更新
+  const deleteMutation = trpc.ocr.deleteRecord.useMutation({
+    onSuccess: () => {
+      toast.success("记录已删除");
+      setCurrentPage(1);
+      setAllRecords([]);
+      deleteId && setDeleteId(null);
+      // 使分页查询缓存失效，重新加载第一页
+      utils.ocr.listRecordsPaginated.invalidate();
+    },
+    onError: () => toast.error("删除失败，请重试"),
+  });
+
+  // 处理数据更新（useEffect 必须在所有 Hooks 之后）
   React.useEffect(() => {
     if (data?.records) {
       if (currentPage === 1) {
@@ -100,20 +114,6 @@ export default function HistoryPage() {
       }
     }
   }, [data, currentPage]);
-
-  const utils = React.useMemo(() => trpc.useUtils(), []);
-
-  const deleteMutation = trpc.ocr.deleteRecord.useMutation({
-    onSuccess: () => {
-      toast.success("记录已删除");
-      setCurrentPage(1);
-      setAllRecords([]);
-      deleteId && setDeleteId(null);
-      // 使分页查询缓存失效，重新加载第一页
-      utils?.ocr.listRecordsPaginated.invalidate();
-    },
-    onError: () => toast.error("删除失败，请重试"),
-  });
 
   const handleLoadMore = () => {
     setCurrentPage((prev) => prev + 1);
