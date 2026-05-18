@@ -17,7 +17,7 @@ type OcrRecord = {
   imageUrl: string;
   imageKey: string;
   originalFilename: string | null;
-  tableData: string;
+  tableData: string | string[][];
   status: "pending" | "processing" | "done" | "error";
   errorMessage: string | null;
   createdAt: Date;
@@ -64,7 +64,8 @@ export default function HistoryPage() {
 
   const handleExport = (record: OcrRecord, format: "xlsx" | "csv") => {
     try {
-      const rows = JSON.parse(record.tableData);
+      // tableData 已经由后端解析，直接使用
+      const rows = typeof record.tableData === 'string' ? JSON.parse(record.tableData) : record.tableData;
       if (!Array.isArray(rows) || rows.length === 0) {
         toast.error("表格数据为空");
         return;
@@ -255,7 +256,7 @@ export default function HistoryPage() {
                   <tbody>
                     {(() => {
                       try {
-                        const tableData = JSON.parse(viewRecord.tableData);
+                        const tableData = typeof viewRecord.tableData === 'string' ? JSON.parse(viewRecord.tableData) : viewRecord.tableData;
                         return tableData.map(
                           (row: string[], rowIdx: number) => (
                             <tr key={rowIdx}>
