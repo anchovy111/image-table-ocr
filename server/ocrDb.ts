@@ -48,9 +48,7 @@ export async function listOcrRecords(userId: number): Promise<OcrRecord[]> {
       status: ocrRecords.status,
       errorMessage: ocrRecords.errorMessage,
       createdAt: ocrRecords.createdAt,
-      updatedAt: ocrRecords.updatedAt,
-      base64Data: { sql: "null" } as any,
-    })
+      updatedAt: ocrRecords.updatedAt,    })
     .from(ocrRecords)
     .where(eq(ocrRecords.userId, userId))
     .orderBy(desc(ocrRecords.createdAt));
@@ -94,9 +92,7 @@ export async function listOcrRecordsPaginated(
       status: ocrRecords.status,
       errorMessage: ocrRecords.errorMessage,
       createdAt: ocrRecords.createdAt,
-      updatedAt: ocrRecords.updatedAt,
-      base64Data: { sql: "null" } as any,
-    })
+      updatedAt: ocrRecords.updatedAt,    })
     .from(ocrRecords)
     .where(eq(ocrRecords.userId, userId))
     .orderBy(desc(ocrRecords.createdAt))
