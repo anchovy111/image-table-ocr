@@ -1,85 +1,38 @@
 import { useState } from "react";
-import React from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { getLoginUrl } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Separator } from "@/components/ui/separator";
-import { EditableTable } from "@/components/EditableTable";
-import { ExportMenu } from "@/components/ExportMenu";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Card } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import {
-  History,
-  Eye,
-  Trash2,
-  LogIn,
-  TableProperties,
-  Calendar,
-  FileImage,
-  ImageIcon,
-  AlertCircle,
-  Clock,
-  Loader2,
-  ChevronDown,
-} from "lucide-react";
-import { cn } from "@/lib/utils";
-import { Link } from "wouter";
+import { Loader2, Eye, Download, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { exportToXLSX, exportToCSV, type TableData } from "@/lib/exportUtils";
 
-interface TableData {
-  headers: string[];
-  rows: string[][];
-}
-
-interface OcrRecord {
+type OcrRecord = {
   id: number;
+  userId: number;
   title: string;
   imageUrl: string;
+  imageKey: string;
   originalFilename: string | null;
-  tableData: TableData;
+  tableData: string;
   status: "pending" | "processing" | "done" | "error";
   errorMessage: string | null;
   createdAt: Date;
   updatedAt: Date;
-}
-
-const statusConfig = {
-  pending: { label: "等待中", className: "status-pending", icon: Clock },
-  processing: { label: "识别中", className: "status-processing", icon: Loader2 },
-  done: { label: "已完成", className: "status-done", icon: TableProperties },
-  error: { label: "识别失败", className: "status-error", icon: AlertCircle },
 };
 
 const PAGE_SIZE = 20;
 
 export default function HistoryPage() {
-  // 所有 Hooks 必须在组件顶层调用
   const { isAuthenticated, loading } = useAuth();
   const [viewRecord, setViewRecord] = useState<OcrRecord | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [allRecords, setAllRecords] = useState<OcrRecord[]>([]);
-  const utils = trpc.useUtils();
 
+  // 直接使用 trpc 查询结果，不做本地累积
   const { data, isLoading, isFetching } = trpc.ocr.listRecordsPaginated.useQuery(
     { page: currentPage, pageSize: PAGE_SIZE },
     {
@@ -87,322 +40,274 @@ export default function HistoryPage() {
     }
   );
 
+  const utils = trpc.useUtils();
+
   const deleteMutation = trpc.ocr.deleteRecord.useMutation({
     onSuccess: () => {
       toast.success("记录已删除");
-      setCurrentPage(1);
-      setAllRecords([]);
-      deleteId && setDeleteId(null);
-      // 使分页查询缓存失效，重新加载第一页
+      setDeleteId(null);
+      // 使分页查询缓存失效，重新加载当前页
       utils.ocr.listRecordsPaginated.invalidate();
     },
     onError: () => toast.error("删除失败，请重试"),
   });
 
-  // 处理数据更新（useEffect 必须在所有 Hooks 之后）
-  React.useEffect(() => {
-    if (data?.records && data.records.length > 0) {
-      if (currentPage === 1) {
-        setAllRecords(data.records);
-      } else {
-        // 避免重复追加，检查是否已存在相同的记录
-        setAllRecords((prev) => {
-          const existingIds = new Set(prev.map((r) => r.id));
-          const newRecords = data.records.filter((r) => !existingIds.has(r.id));
-          return [...prev, ...newRecords];
-        });
-      }
-    }
-  }, [currentPage, data?.records?.length, JSON.stringify(data?.records?.map((r) => r.id))]);
+  const handleDelete = (id: number) => {
+    setDeleteId(id);
+  };
 
-  const handleLoadMore = () => {
-    setCurrentPage((prev) => prev + 1);
+  const confirmDelete = () => {
+    if (deleteId) {
+      deleteMutation.mutate({ recordId: deleteId });
+    }
+  };
+
+  const handleExport = (record: OcrRecord, format: "xlsx" | "csv") => {
+    try {
+      const rows = JSON.parse(record.tableData);
+      if (!Array.isArray(rows) || rows.length === 0) {
+        toast.error("表格数据为空");
+        return;
+      }
+
+      // 第一行作为表头，其余行作为数据
+      const tableData: TableData = {
+        headers: rows[0] || [],
+        rows: rows.slice(1) || [],
+      };
+      const filename = record.title || "table";
+
+      if (format === "xlsx") {
+        exportToXLSX(tableData, filename);
+      } else {
+        exportToCSV(tableData, filename);
+      }
+      toast.success(`已导出为 ${format.toUpperCase()}`);
+    } catch (error) {
+      toast.error("导出失败，请重试");
+    }
   };
 
   if (loading) {
     return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="h-8 w-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
   }
+
+  const handleLoginClick = () => {
+    window.location.href = getLoginUrl();
+  };
 
   if (!isAuthenticated) {
     return (
-      <div className="container py-20 text-center space-y-6">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted/50 mx-auto">
-          <History className="h-7 w-7 text-muted-foreground/40" />
-        </div>
-        <div>
-          <h2 className="text-xl font-semibold">需要登录</h2>
-          <p className="text-muted-foreground mt-2">登录后可查看您的识别历史记录</p>
-        </div>
-        <Button onClick={() => (window.location.href = getLoginUrl())} className="gap-2">
-          <LogIn className="h-4 w-4" />
-          立即登录
-        </Button>
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4">
+        <h1 className="text-2xl font-bold">请登录查看历史记录</h1>
+        <Button onClick={handleLoginClick}>登录</Button>
       </div>
     );
   }
 
-  const isEmpty = !isLoading && allRecords.length === 0;
-  const hasMore = data?.hasMore ?? false;
+  const records = data?.records || [];
+  const total = data?.total || 0;
+  const totalPages = Math.ceil(total / PAGE_SIZE);
 
   return (
-    <div className="container py-8 space-y-6 max-w-5xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground tracking-tight flex items-center gap-2">
-            <History className="h-6 w-6 text-primary" />
-            历史记录
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {data ? `共 ${data.total} 条识别记录` : "加载中…"}
-          </p>
+    <div className="min-h-screen bg-background">
+      <div className="container mx-auto px-4 py-8">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold mb-2">识别历史</h1>
+          <p className="text-muted-foreground">共 {total} 条记录</p>
         </div>
-        <Link href="/">
-          <Button size="sm" className="gap-2">
-            <TableProperties className="h-4 w-4" />
-            新建识别
-          </Button>
-        </Link>
+
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          </div>
+        ) : records.length === 0 ? (
+          <Card className="p-8 text-center">
+            <p className="text-muted-foreground">暂无识别记录</p>
+          </Card>
+        ) : (
+          <>
+            <div className="space-y-4 mb-8">
+              {records.map((record) => (
+                <Card
+                  key={record.id}
+                  className="p-4 hover:shadow-md transition-shadow"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold truncate">{record.title}</h3>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {new Date(record.createdAt).toLocaleString()}
+                      </p>
+                      {record.status === "error" && (
+                        <p className="text-sm text-destructive mt-1">
+                          错误: {record.errorMessage}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex gap-2 flex-shrink-0">
+                      {record.status === "done" && (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setViewRecord(record)}
+                            title="查看详情"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleExport(record, "xlsx")}
+                            title="导出 Excel"
+                          >
+                            <Download className="w-4 h-4" />
+                            XLSX
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleExport(record, "csv")}
+                            title="导出 CSV"
+                          >
+                            <Download className="w-4 h-4" />
+                            CSV
+                          </Button>
+                        </>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDelete(record.id)}
+                        title="删除"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+
+            {/* 分页控制 */}
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">
+                第 {currentPage} / {totalPages} 页
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1 || isFetching}
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                  上一页
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages || isFetching}
+                >
+                  下一页
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
-      {/* Records list */}
-      {isLoading && currentPage === 1 ? (
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => (
-            <Card key={i} className="card-elegant border-0">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-4">
-                  <Skeleton className="h-14 w-14 rounded-lg flex-shrink-0" />
-                  <div className="flex-1 space-y-2">
-                    <Skeleton className="h-4 w-48" />
-                    <Skeleton className="h-3 w-32" />
-                  </div>
-                  <Skeleton className="h-8 w-20" />
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      ) : isEmpty ? (
-        <Card className="card-elegant border-0 border-dashed">
-          <CardContent className="flex flex-col items-center justify-center py-16 gap-4 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted/50">
-              <FileImage className="h-7 w-7 text-muted-foreground/40" />
-            </div>
-            <div>
-              <p className="text-base font-medium text-muted-foreground/70">暂无识别记录</p>
-              <p className="text-sm text-muted-foreground/50 mt-1">
-                上传图片开始识别后，记录将自动保存在这里
-              </p>
-            </div>
-            <Link href="/">
-              <Button size="sm" className="gap-2 mt-2">
-                <TableProperties className="h-4 w-4" />
-                开始识别
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-      ) : (
-        <>
-          <div className="space-y-3">
-            {allRecords.map((record) => {
-              const status = statusConfig[record.status];
-              const StatusIcon = status.icon;
-              const hasData =
-                record.status === "done" &&
-                (record.tableData.headers.length > 0 || record.tableData.rows.length > 0);
-
-              return (
-                <Card key={record.id} className="card-elegant border-0 animate-fade-in-up">
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-4">
-                      {/* Image thumbnail */}
-                      <div className="h-14 w-14 rounded-lg overflow-hidden bg-muted/40 flex-shrink-0 border border-border/40">
-                        {record.imageUrl ? (
-                          <img
-                            src={record.imageUrl}
-                            alt={record.title}
-                            className="h-full w-full object-cover"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).style.display = "none";
-                            }}
-                          />
-                        ) : (
-                          <div className="h-full w-full flex items-center justify-center">
-                            <ImageIcon className="h-6 w-6 text-muted-foreground/40" />
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Info */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h3 className="font-medium text-foreground truncate max-w-[200px] sm:max-w-none">
-                            {record.title}
-                          </h3>
-                          <Badge
-                            variant="outline"
-                            className={cn("text-xs px-2 py-0.5 border", status.className)}
-                          >
-                            <StatusIcon
-                              className={cn(
-                                "h-3 w-3 mr-1",
-                                record.status === "processing" && "animate-spin"
-                              )}
-                            />
-                            {status.label}
-                          </Badge>
-                        </div>
-                        <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <Calendar className="h-3 w-3" />
-                            {new Date(record.createdAt).toLocaleString("zh-CN", {
-                              month: "numeric",
-                              day: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </span>
-                          {hasData && (
-                            <span>
-                              {record.tableData.headers.length} 列 · {record.tableData.rows.length} 行
-                            </span>
-                          )}
-                          {record.originalFilename && (
-                            <span className="truncate max-w-[120px] hidden sm:block">
-                              {record.originalFilename}
-                            </span>
-                          )}
-                        </div>
-                        {record.status === "error" && record.errorMessage && (
-                          <p className="text-xs text-destructive mt-1 truncate">
-                            {record.errorMessage}
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Actions */}
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        {hasData && (
-                          <>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="gap-1.5 h-8 text-xs"
-                              onClick={() => setViewRecord(record as OcrRecord)}
-                            >
-                              <Eye className="h-3.5 w-3.5" />
-                              查看
-                            </Button>
-                            <ExportMenu
-                              tableData={record.tableData}
-                              filename={record.title}
-                              size="sm"
-                              variant="outline"
-                            />
-                          </>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                          onClick={() => setDeleteId(record.id)}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-
-          {/* Load more button */}
-          {hasMore && (
-            <div className="flex justify-center pt-4">
-              <Button
-                variant="outline"
-                onClick={handleLoadMore}
-                disabled={isFetching}
-                className="gap-2"
-              >
-                {isFetching ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    加载中…
-                  </>
-                ) : (
-                  <>
-                    <ChevronDown className="h-4 w-4" />
-                    加载更多
-                  </>
-                )}
-              </Button>
+      {/* 查看详情弹窗 */}
+      <Dialog open={!!viewRecord} onOpenChange={() => setViewRecord(null)}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{viewRecord?.title}</DialogTitle>
+          </DialogHeader>
+          {viewRecord && (
+            <div className="mt-4">
+              <div className="mb-4 flex gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => handleExport(viewRecord, "xlsx")}
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  导出 Excel
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleExport(viewRecord, "csv")}
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  导出 CSV
+                </Button>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse border border-border">
+                  <tbody>
+                    {(() => {
+                      try {
+                        const tableData = JSON.parse(viewRecord.tableData);
+                        return tableData.map(
+                          (row: string[], rowIdx: number) => (
+                            <tr key={rowIdx}>
+                              {row.map((cell: string, cellIdx: number) => (
+                                <td
+                                  key={cellIdx}
+                                  className="border border-border px-3 py-2 text-sm"
+                                >
+                                  {cell}
+                                </td>
+                              ))}
+                            </tr>
+                          )
+                        );
+                      } catch {
+                        return (
+                          <tr>
+                            <td className="border border-border px-3 py-2 text-sm text-destructive">
+                              表格数据格式错误
+                            </td>
+                          </tr>
+                        );
+                      }
+                    })()}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
-        </>
-      )}
-
-      {/* View dialog */}
-      <Dialog open={!!viewRecord} onOpenChange={(open) => !open && setViewRecord(null)}>
-        <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <TableProperties className="h-5 w-5 text-primary" />
-              {viewRecord?.title}
-            </DialogTitle>
-            <DialogDescription>
-              {viewRecord && (
-                <>
-                  {viewRecord.tableData.headers.length} 列 · {viewRecord.tableData.rows.length} 行 ·{" "}
-                  {new Date(viewRecord.createdAt).toLocaleString("zh-CN")}
-                </>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          <Separator />
-          <div className="flex items-center justify-between py-2">
-            <p className="text-xs text-muted-foreground">仅供查看，如需编辑请重新识别</p>
-            {viewRecord && (
-              <ExportMenu
-                tableData={viewRecord.tableData}
-                filename={viewRecord.title}
-                size="sm"
-              />
-            )}
-          </div>
-          <div className="overflow-auto flex-1">
-            {viewRecord && (
-              <EditableTable data={viewRecord.tableData} readOnly className="border-border/40" />
-            )}
-          </div>
         </DialogContent>
       </Dialog>
 
-      {/* Delete confirm */}
-      <AlertDialog open={deleteId !== null} onOpenChange={(open) => !open && setDeleteId(null)}>
+      {/* 删除确认弹窗 */}
+      <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>确认删除</AlertDialogTitle>
-            <AlertDialogDescription>
-              此操作将永久删除该识别记录，无法恢复。确定要继续吗？
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
+          <AlertDialogTitle>确认删除</AlertDialogTitle>
+          <AlertDialogDescription>
+            确定要删除这条识别记录吗？此操作无法撤销。
+          </AlertDialogDescription>
+          <div className="flex gap-2 justify-end">
             <AlertDialogCancel>取消</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => deleteId && deleteMutation.mutate({ recordId: deleteId })}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deleteMutation.isPending ? "删除中…" : "确认删除"}
+            <AlertDialogAction onClick={confirmDelete} disabled={deleteMutation.isPending}>
+              {deleteMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  删除中...
+                </>
+              ) : (
+                "删除"
+              )}
             </AlertDialogAction>
-          </AlertDialogFooter>
+          </div>
         </AlertDialogContent>
       </AlertDialog>
     </div>
