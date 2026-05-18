@@ -163,7 +163,7 @@ export function ImageUploader({ onFileSelect, disabled }: ImageUploaderProps) {
                 <span className="text-primary font-semibold">点击上传</span>
               </p>
               <p className="mt-1.5 text-sm text-muted-foreground">
-                支持 JPG、PNG、PDF · 最大 {MAX_SIZE_MB}MB
+                支持 JPG、PNG、GIF、PDF · 最大 {MAX_SIZE_MB}MB
               </p>
             </div>
             <div className="flex items-center gap-4 text-xs text-muted-foreground/60">
