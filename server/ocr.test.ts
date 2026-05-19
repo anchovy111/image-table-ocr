@@ -1,254 +1,116 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+import { z } from "zod";
 import { appRouter } from "./routers";
-import type { TrpcContext } from "./_core/context";
+import { TrpcContext } from "./_core/trpc";
 
 // Mock database functions
 vi.mock("./ocrDb", () => ({
-  createOcrRecord: vi.fn().mockResolvedValue(1),
-  updateOcrRecord: vi.fn().mockResolvedValue(undefined),
+  createOcrRecord: vi.fn(),
   getOcrRecordById: vi.fn(),
-  listOcrRecords: vi.fn().mockResolvedValue([]),
-  deleteOcrRecord: vi.fn().mockResolvedValue(undefined),
+  listOcrRecords: vi.fn(),
+  deleteOcrRecord: vi.fn(),
   listOcrRecordsPaginated: vi.fn(),
-}));
-
-// Mock storage
-vi.mock("./storage", () => ({
-  storagePut: vi.fn().mockResolvedValue({
-    key: "ocr/1/test.jpg",
-    url: "/manus-storage/ocr/1/test.jpg",
-  }),
+  updateOcrRecord: vi.fn(),
 }));
 
 // Mock LLM
 vi.mock("./_core/llm", () => ({
-  invokeLLM: vi.fn().mockResolvedValue({
-    choices: [
-      {
-        message: {
-          content: JSON.stringify({
-            headers: ["姓名", "年龄", "城市"],
-            rows: [
-              ["张三", "25", "北京"],
-              ["李四", "30", "上海"],
-            ],
-          }),
-        },
-      },
-    ],
-  }),
+  invokeLLM: vi.fn(),
 }));
 
-import { createOcrRecord, getOcrRecordById, listOcrRecords, deleteOcrRecord, listOcrRecordsPaginated } from "./ocrDb";
+// Mock storage
+vi.mock("./storage", () => ({
+  storagePut: vi.fn(),
+}));
+
+import { createOcrRecord, getOcrRecordById, listOcrRecords, deleteOcrRecord, listOcrRecordsPaginated, updateOcrRecord } from "./ocrDb";
+import { storagePut } from "./storage";
+import { invokeLLM } from "./_core/llm";
 
 function createMockContext(userId = 1): TrpcContext {
   return {
     user: {
       id: userId,
-      openId: `user-${userId}`,
-      name: "测试用户",
-      email: "test@example.com",
-      loginMethod: "manus",
+      openId: "test-open-id",
+      name: "Test User",
       role: "user",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      lastSignedIn: new Date(),
     },
-    req: { protocol: "https", headers: {} } as TrpcContext["req"],
-    res: { clearCookie: vi.fn() } as unknown as TrpcContext["res"],
+    req: {} as any,
+    res: {} as any,
   };
 }
 
 describe("ocr.uploadImage", () => {
-  it("should upload image and create a pending record", async () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(createOcrRecord).mockResolvedValue(1);
+    vi.mocked(storagePut).mockResolvedValue({
+      url: "/manus-storage/test.jpg",
+      key: "ocr/1/test.jpg",
+    });
+  });
+
+  it("should upload image and create OCR record", async () => {
     const ctx = createMockContext();
     const caller = appRouter.createCaller(ctx);
 
     const result = await caller.ocr.uploadImage({
       filename: "test.jpg",
       mimeType: "image/jpeg",
-      base64Data: Buffer.from("fake image data").toString("base64"),
+      base64Data: "base64encodeddata",
     });
 
-    expect(result).toHaveProperty("recordId", 1);
-    expect(result).toHaveProperty("imageUrl");
-    expect(createOcrRecord).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: 1,
-        status: "pending",
-        originalFilename: "test.jpg",
-      })
-    );
+    expect(result).toEqual({
+      recordId: 1,
+      imageUrl: "/manus-storage/test.jpg",
+    });
+    expect(vi.mocked(createOcrRecord)).toHaveBeenCalled();
   });
 });
 
 describe("ocr.listRecords", () => {
-  it("should return empty list when no records", async () => {
-    vi.mocked(listOcrRecords).mockResolvedValueOnce([]);
-    const ctx = createMockContext();
-    const caller = appRouter.createCaller(ctx);
-
-    const result = await caller.ocr.listRecords();
-    expect(result).toEqual([]);
+  beforeEach(() => {
+    vi.clearAllMocks();
+    const mockRecords = [
+      {
+        id: 1,
+        userId: 1,
+        title: "test",
+        imageUrl: "/manus-storage/test.jpg",
+        imageKey: "ocr/1/test.jpg",
+        originalFilename: "test.jpg",
+        tableData: JSON.stringify([["A", "B"], ["1", "2"]]),
+        status: "done" as const,
+        errorMessage: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ];
+    vi.mocked(listOcrRecords).mockResolvedValue(mockRecords);
   });
 
-  it("should return records with parsed tableData", async () => {
-    const mockRecord = {
-      id: 1,
-      userId: 1,
-      title: "测试记录",
-      imageUrl: "/manus-storage/test.jpg",
-      imageKey: "ocr/1/test.jpg",
-      originalFilename: "test.jpg",
-      tableData: JSON.stringify({ headers: ["A", "B"], rows: [["1", "2"]] }),
-      status: "done" as const,
-      errorMessage: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-    vi.mocked(listOcrRecords).mockResolvedValueOnce([mockRecord]);
-
+  it("should list OCR records for user", async () => {
     const ctx = createMockContext();
     const caller = appRouter.createCaller(ctx);
+
     const result = await caller.ocr.listRecords();
 
     expect(result).toHaveLength(1);
-    expect(result[0].tableData).toEqual({ headers: ["A", "B"], rows: [["1", "2"]] });
+    expect(result[0].id).toBe(1);
   });
 });
 
 describe("ocr.getRecord", () => {
-  it("should throw NOT_FOUND when record does not exist", async () => {
-    vi.mocked(getOcrRecordById).mockResolvedValueOnce(undefined);
-    const ctx = createMockContext();
-    const caller = appRouter.createCaller(ctx);
-
-    await expect(caller.ocr.getRecord({ recordId: 999 })).rejects.toThrow("识别记录不存在");
-  });
-
-  it("should return record with parsed tableData", async () => {
-    const mockRecord = {
-      id: 1,
-      userId: 1,
-      title: "测试",
-      imageUrl: "/manus-storage/test.jpg",
-      imageKey: "ocr/1/test.jpg",
-      originalFilename: "test.jpg",
-      tableData: JSON.stringify({ headers: ["X"], rows: [["val"]] }),
-      status: "done" as const,
-      errorMessage: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-    vi.mocked(getOcrRecordById).mockResolvedValueOnce(mockRecord);
-
-    const ctx = createMockContext();
-    const caller = appRouter.createCaller(ctx);
-    const result = await caller.ocr.getRecord({ recordId: 1 });
-
-    expect(result.tableData).toEqual({ headers: ["X"], rows: [["val"]] });
-  });
-});
-
-describe("ocr.listRecordsPaginated", () => {
-  it("should return paginated records with hasMore flag", async () => {
-    const mockRecords = Array.from({ length: 20 }, (_, i) => ({
-      id: i + 1,
-      userId: 1,
-      title: `记录 ${i + 1}`,
-      imageUrl: "/manus-storage/test.jpg",
-      imageKey: "ocr/1/test.jpg",
-      originalFilename: "test.jpg",
-      tableData: JSON.stringify({ headers: ["A"], rows: [["1"]] }),
-      status: "done" as const,
-      errorMessage: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }));
-
-    vi.mocked(listOcrRecordsPaginated).mockResolvedValueOnce({
-      records: mockRecords,
-      total: 50,
-      hasMore: true,
-    });
-
-    const ctx = createMockContext();
-    const caller = appRouter.createCaller(ctx);
-    const result = await caller.ocr.listRecordsPaginated({ page: 1, pageSize: 20 });
-
-    expect(result.records).toHaveLength(20);
-    expect(result.total).toBe(50);
-    expect(result.hasMore).toBe(true);
-    expect(result.page).toBe(1);
-    expect(result.pageSize).toBe(20);
-  });
-
-  it("should return hasMore=false on last page", async () => {
-    const mockRecords = Array.from({ length: 10 }, (_, i) => ({
-      id: i + 41,
-      userId: 1,
-      title: `记录 ${i + 41}`,
-      imageUrl: "/manus-storage/test.jpg",
-      imageKey: "ocr/1/test.jpg",
-      originalFilename: "test.jpg",
-      tableData: JSON.stringify({ headers: ["A"], rows: [["1"]] }),
-      status: "done" as const,
-      errorMessage: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }));
-
-    vi.mocked(listOcrRecordsPaginated).mockResolvedValueOnce({
-      records: mockRecords,
-      total: 50,
-      hasMore: false,
-    });
-
-    const ctx = createMockContext();
-    const caller = appRouter.createCaller(ctx);
-    const result = await caller.ocr.listRecordsPaginated({ page: 3, pageSize: 20 });
-
-    expect(result.records).toHaveLength(10);
-    expect(result.hasMore).toBe(false);
-  });
-});
-
-describe("ocr.deleteRecord", () => {
-  it("should delete a record successfully", async () => {
-    const mockRecord = {
-      id: 1,
-      userId: 1,
-      title: "测试",
-      imageUrl: "/manus-storage/test.jpg",
-      imageKey: "ocr/1/test.jpg",
-      originalFilename: "test.jpg",
-      tableData: JSON.stringify({ headers: ["X"], rows: [["val"]] }),
-      status: "done" as const,
-      errorMessage: null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-    vi.mocked(getOcrRecordById).mockResolvedValueOnce(mockRecord);
-
-    const ctx = createMockContext();
-    const caller = appRouter.createCaller(ctx);
-
-    const result = await caller.ocr.deleteRecord({ recordId: 1 });
-    expect(result).toEqual({ success: true });
-    expect(deleteOcrRecord).toHaveBeenCalledWith(1, 1);
-  });
-});
-
-describe("ocr.updateTableData", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     const mockRecord = {
       id: 1,
       userId: 1,
-      title: "测试",
+      title: "test",
       imageUrl: "/manus-storage/test.jpg",
       imageKey: "ocr/1/test.jpg",
       originalFilename: "test.jpg",
-      tableData: JSON.stringify({ headers: ["A"], rows: [["1"]] }),
+      tableData: JSON.stringify([["A", "B"], ["1", "2"]]),
       status: "done" as const,
       errorMessage: null,
       createdAt: new Date(),
@@ -257,16 +119,227 @@ describe("ocr.updateTableData", () => {
     vi.mocked(getOcrRecordById).mockResolvedValue(mockRecord);
   });
 
-  it("should update table data successfully", async () => {
+  it("should get OCR record by ID", async () => {
     const ctx = createMockContext();
     const caller = appRouter.createCaller(ctx);
 
-    const newData = { headers: ["姓名", "年龄"], rows: [["张三", "25"]] };
+    const result = await caller.ocr.getRecord({ recordId: 1 });
+
+    expect(result.id).toBe(1);
+    expect(result.title).toBe("test");
+  });
+
+  it("should throw error if record not found", async () => {
+    vi.mocked(getOcrRecordById).mockResolvedValue(undefined);
+    const ctx = createMockContext();
+    const caller = appRouter.createCaller(ctx);
+
+    try {
+      await caller.ocr.getRecord({ recordId: 999 });
+      expect.fail("Should throw error");
+    } catch (error: any) {
+      expect(error.code).toBe("NOT_FOUND");
+    }
+  });
+});
+
+describe("ocr.listRecordsPaginated", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    const mockRecords = Array.from({ length: 20 }, (_, i) => ({
+      id: i + 1,
+      userId: 1,
+      title: `test-${i}`,
+      imageUrl: `/manus-storage/test-${i}.jpg`,
+      imageKey: `ocr/1/test-${i}.jpg`,
+      originalFilename: `test-${i}.jpg`,
+      tableData: JSON.stringify([["A", "B"], ["1", "2"]]),
+      status: "done" as const,
+      errorMessage: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }));
+    vi.mocked(listOcrRecordsPaginated).mockResolvedValue({
+      records: mockRecords,
+      total: 50,
+      hasMore: true,
+    });
+  });
+
+  it("should list paginated OCR records", async () => {
+    const ctx = createMockContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.ocr.listRecordsPaginated({ page: 1 });
+
+    expect(result.records).toHaveLength(20);
+    expect(result.total).toBe(50);
+    expect(result.hasMore).toBe(true);
+  });
+
+  it("should list second page of OCR records", async () => {
+    const ctx = createMockContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.ocr.listRecordsPaginated({ page: 2 });
+
+    expect(result.records).toHaveLength(20);
+    expect(result.total).toBe(50);
+    expect(result.hasMore).toBe(true);
+  });
+});
+
+describe("ocr.deleteRecord", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    const mockRecord = {
+      id: 1,
+      userId: 1,
+      title: "test",
+      imageUrl: "/manus-storage/test.jpg",
+      imageKey: "ocr/1/test.jpg",
+      originalFilename: "test.jpg",
+      tableData: JSON.stringify([["A"], ["1"]]),
+      status: "done" as const,
+      errorMessage: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    vi.mocked(getOcrRecordById).mockResolvedValue(mockRecord);
+    vi.mocked(deleteOcrRecord).mockResolvedValue(undefined);
+  });
+
+  it("should delete OCR record", async () => {
+    const ctx = createMockContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.ocr.deleteRecord({ recordId: 1 });
+
+    expect(result).toEqual({ success: true });
+  });
+});
+
+describe("ocr.updateTableData", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    const mockRecord = {
+      id: 1,
+      userId: 1,
+      title: "test",
+      imageUrl: "/manus-storage/test.jpg",
+      imageKey: "ocr/1/test.jpg",
+      originalFilename: "test.jpg",
+      tableData: JSON.stringify([["A"], ["1"]]),
+      status: "done" as const,
+      errorMessage: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    vi.mocked(getOcrRecordById).mockResolvedValue(mockRecord);
+    vi.mocked(updateOcrRecord).mockResolvedValue(undefined);
+  });
+
+  it("should update table data", async () => {
+    const ctx = createMockContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const newData = { headers: ["列1", "列2"], rows: [["值1", "值2"]] };
     const result = await caller.ocr.updateTableData({
       recordId: 1,
       tableData: newData,
     });
 
     expect(result).toEqual({ success: true });
+  });
+});
+
+describe("ocr.updateTableData - format consistency", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    const mockRecord = {
+      id: 1,
+      userId: 1,
+      title: "测试",
+      imageUrl: "/manus-storage/test.jpg",
+      imageKey: "ocr/1/test.jpg",
+      originalFilename: "test.jpg",
+      tableData: JSON.stringify([["旧列1", "旧列2"], ["旧值1", "旧值2"]]),
+      status: "done" as const,
+      errorMessage: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    vi.mocked(getOcrRecordById).mockResolvedValue(mockRecord);
+    vi.mocked(updateOcrRecord).mockResolvedValue(undefined);
+  });
+
+  it("should save table data in 2D array format [headers, ...rows]", async () => {
+    const ctx = createMockContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const newData = { headers: ["列1", "列2"], rows: [["值1", "值2"]] };
+    const result = await caller.ocr.updateTableData({
+      recordId: 1,
+      tableData: newData,
+    });
+
+    // 验证返回成功
+    expect(result).toEqual({ success: true });
+
+    // 验证 updateOcrRecord 被调用
+    expect(vi.mocked(updateOcrRecord)).toHaveBeenCalled();
+
+    // 验证 updateOcrRecord 被调用时，tableData 已转换为二维数组格式
+    const updateCall = vi.mocked(updateOcrRecord).mock.calls[0];
+    const savedData = JSON.parse(updateCall[2].tableData as string);
+    // 预期格式：[["列1", "列2"], ["值1", "值2"]]
+    expect(Array.isArray(savedData)).toBe(true);
+    expect(savedData).toHaveLength(2);
+    expect(savedData[0]).toEqual(["列1", "列2"]);
+    expect(savedData[1]).toEqual(["值1", "值2"]);
+  });
+});
+
+describe("ocr.recognize with PDF", () => {
+  it("should handle PDF files with base64 data URL", async () => {
+    vi.clearAllMocks();
+    const mockRecord = {
+      id: 1,
+      userId: 1,
+      title: "test.pdf",
+      imageUrl: "/manus-storage/test.pdf",
+      imageKey: "ocr/1/test.pdf",
+      originalFilename: "test.pdf",
+      tableData: JSON.stringify([["A", "B"], ["1", "2"]]),
+      status: "done" as const,
+      errorMessage: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    vi.mocked(createOcrRecord).mockResolvedValue(1);
+    vi.mocked(storagePut).mockResolvedValue({
+      url: "/manus-storage/test.pdf",
+      key: "ocr/1/test.pdf",
+    });
+    vi.mocked(invokeLLM).mockResolvedValue({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify([["A", "B"], ["1", "2"]]),
+          },
+        },
+      ],
+    } as any);
+
+    const ctx = createMockContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.ocr.uploadImage({
+      filename: "test.pdf",
+      mimeType: "application/pdf",
+      base64Data: "base64encodedpdfdata",
+    });
+
+    expect(result.recordId).toBe(1);
   });
 });

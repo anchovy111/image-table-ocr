@@ -109,7 +109,7 @@ export const ocrRouter = router({
                 {
                   type: "file_url" as const,
                   file_url: {
-                    url: record.imageUrl,
+                    url: `data:application/pdf;base64,${record.base64Data}`,
                     mime_type: "application/pdf" as const,
                   },
                 },
@@ -354,8 +354,10 @@ export const ocrRouter = router({
       }
 
       const validated = TableDataSchema.parse(input.tableData);
+      // 转换为二维数组格式：[headers, ...rows]
+      const tableArray = [validated.headers, ...validated.rows];
       await updateOcrRecord(input.recordId, ctx.user.id, {
-        tableData: JSON.stringify(validated),
+        tableData: JSON.stringify(tableArray),
       });
 
       return { success: true };
