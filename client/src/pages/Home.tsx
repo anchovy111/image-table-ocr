@@ -76,7 +76,15 @@ export default function Home() {
         recordId: uploadResult.recordId,
       });
 
-      setTableData(result.tableData);
+      // 处理二维数组格式：[headers, ...rows]
+      const tableArray = result.tableData;
+      if (Array.isArray(tableArray) && tableArray.length > 0) {
+        const headers = tableArray[0] as string[];
+        const rows = tableArray.slice(1) as string[][];
+        setTableData({ headers, rows });
+      } else {
+        throw new Error("表格数据格式错误");
+      }
       setStep("done");
       toast.success("表格识别成功！");
     } catch (err) {

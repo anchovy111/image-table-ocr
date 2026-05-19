@@ -238,12 +238,15 @@ export const ocrRouter = router({
           throw parseErr;
         }
 
+        // 转换为二维数组格式：[headers, ...rows]
+        const tableArray = [parsed.headers, ...parsed.rows];
+
         await updateOcrRecord(input.recordId, ctx.user.id, {
-          tableData: JSON.stringify(parsed),
+          tableData: JSON.stringify(tableArray),
           status: "done",
         });
 
-        return { success: true, tableData: parsed };
+        return { success: true, tableData: tableArray };
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : "识别失败";
         await updateOcrRecord(input.recordId, ctx.user.id, {
