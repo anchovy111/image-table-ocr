@@ -66,6 +66,76 @@ describe("ocr.uploadImage", () => {
     });
     expect(vi.mocked(createOcrRecord)).toHaveBeenCalled();
   });
+
+  it("should handle Chinese filename by converting to ASCII", async () => {
+    const ctx = createMockContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.ocr.uploadImage({
+      filename: "表格识别.jpg",
+      mimeType: "image/jpeg",
+      base64Data: "base64encodeddata",
+    });
+
+    expect(result).toEqual({
+      recordId: 1,
+      imageUrl: "/manus-storage/test.jpg",
+    });
+
+    // 验证 storagePut 被调用时，文件名已转换为 ASCII
+    const storageCall = vi.mocked(storagePut).mock.calls[0];
+    const storagePath = storageCall[0] as string;
+    // 路径应该包含转换后的文件名（中文转为下划线）
+    expect(storagePath).toMatch(/ocr\/1\/\d+-file\.jpg/);
+    // 路径不应该包含中文字符
+    expect(storagePath).not.toMatch(/[\u4e00-\u9fa5]/);
+  });
+
+  it("should handle non-ASCII extension names", async () => {
+    const ctx = createMockContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.ocr.uploadImage({
+      filename: "test.图片",
+      mimeType: "image/jpeg",
+      base64Data: "base64encodeddata",
+    });
+
+    expect(result).toEqual({
+      recordId: 1,
+      imageUrl: "/manus-storage/test.jpg",
+    });
+
+    // 验证扩展名也被转换为 ASCII
+    const storageCall = vi.mocked(storagePut).mock.calls[0];
+    const storagePath = storageCall[0] as string;
+    // 路径不应该包含任何非 ASCII 字符
+    expect(storagePath).not.toMatch(/[\u4e00-\u9fa5]/);
+  });
+
+  it("should handle PDF files with Chinese names", async () => {
+    const ctx = createMockContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.ocr.uploadImage({
+      filename: "表格数据.pdf",
+      mimeType: "application/pdf",
+      base64Data: "base64encodeddata",
+    });
+
+    expect(result).toEqual({
+      recordId: 1,
+      imageUrl: "/manus-storage/test.jpg",
+    });
+
+    // 验证 PDF 文件名和扩展名都被转换为 ASCII
+    const storageCall = vi.mocked(storagePut).mock.calls[0];
+    const storagePath = storageCall[0] as string;
+    // 路径不应该包含任何非 ASCII 字符
+    expect(storagePath).not.toMatch(/[\u4e00-\u9fa5]/);
+    // 应该包含 pdf 扩展名
+    expect(storagePath).toMatch(/\.pdf$/);
+  });
 });
 
 describe("ocr.listRecords", () => {

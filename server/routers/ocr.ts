@@ -20,6 +20,56 @@ function getMimeType(filename?: string | null): string {
   return "image/jpeg";
 }
 
+/**
+ * 将文件名转换为 ASCII 字符，以兼容 S3 存储的路径要求
+ * 中文和其他非 ASCII 字符用下划线替换
+ */
+function sanitizeFilename(filename: string): string {
+  // 提取文件扩展名
+  const lastDotIndex = filename.lastIndexOf(".");
+  const name = lastDotIndex > 0 ? filename.substring(0, lastDotIndex) : filename;
+  const ext = lastDotIndex > 0 ? filename.substring(lastDotIndex) : "";
+
+  // 辅助函数：将单个字符串转换为 ASCII
+  const toASCII = (str: string): string => {
+    let result = "";
+    for (const char of str) {
+      const code = char.charCodeAt(0);
+      // ASCII 字符（数字、字母、常见符号）直接保留
+      if ((code >= 48 && code <= 57) || // 0-9
+          (code >= 65 && code <= 90) || // A-Z
+          (code >= 97 && code <= 122) || // a-z
+          char === "-" || char === "_") {
+        result += char;
+      } else if (code > 127) {
+        // 非 ASCII 字符用下划线替换（包括中文、日文等）
+        result += "_";
+      }
+      // 其他特殊字符忽略
+    }
+    return result;
+  };
+
+  // 转换文件名部分
+  let sanitized = toASCII(name);
+  // 移除连续的下划线
+  sanitized = sanitized.replace(/_+/g, "_").replace(/^_+|_+$/g, "");
+  if (!sanitized) sanitized = "file";
+  if (sanitized.length > 100) sanitized = sanitized.substring(0, 100);
+
+  // 转换扩展名部分（移除点号，只保留扩展名本身的 ASCII 字符）
+  let sanitizedExt = "";
+  if (ext) {
+    const extName = ext.substring(1); // 移除点号
+    sanitizedExt = toASCII(extName);
+    if (sanitizedExt) {
+      sanitizedExt = "." + sanitizedExt;
+    }
+  }
+
+  return sanitized + sanitizedExt;
+}
+
 const TableDataSchema = z.object({
   headers: z.array(z.string()),
   rows: z.array(z.array(z.string())),
@@ -38,9 +88,12 @@ export const ocrRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const buffer = Buffer.from(input.base64Data, "base64");
+      
+      // 将文件名转换为 ASCII 字符以兼容 S3 存储
+      const sanitizedFilename = sanitizeFilename(input.filename);
 
       const { url, key } = await storagePut(
-        `ocr/${ctx.user.id}/${Date.now()}-${input.filename}`,
+        `ocr/${ctx.user.id}/${Date.now()}-${sanitizedFilename}`,
         buffer,
         input.mimeType
       );
